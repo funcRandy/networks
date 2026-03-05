@@ -13,6 +13,7 @@ import json
 # Import socket library
 from socket import *
 
+# creates an object with the set of letters and their positions in the word
 def letterPositions(word):
     positions = {}
 
@@ -48,33 +49,88 @@ serverSocket.listen(1)
 
 print("The server is ready to receive")
 
-# Wait for connection and create a new socket
-# It blocks here waiting for connection
-connectionSocket, addr = serverSocket.accept()
-
-word = 'arkansas'
-
-# Forever, read in sentence, convert to uppercase, and send
 while True:
+    
+    # Wait for connection and create a new socket
+    # It blocks here waiting for connection
+    connectionSocket, addr = serverSocket.accept()
 
-    # Read bytes from socket
-    letter = connectionSocket.recv(1024)
-    
-    if not letter:
-        break
-    
-    letterString = letter.decode('utf-8')
-    
-    if letterString in word:
-        reply = 'Correct'
-        correctPositions = letterPositions(word)[letterString]
-    else:
-        reply = 'Incorrect'
-        correctPositions = []
-  
-    replyBytes = reply.encode('utf-8')
-    # Send it into established connection
-    connectionSocket.send(replyBytes)
-    
-    correctPositionsBytes = json.dumps(correctPositions).encode('utf-8')
-    connectionSocket.send(correctPositionsBytes)
+    # game variables
+    word = 'arkansas'
+    numGuesses = 0
+    maxGuesses = 7
+    gameOver = False
+    positionMap = letterPositions(word)
+    correctLetters = set()
+    incorrectLetters = set()
+
+    # use newline-delimited JSON to make it easier to send bundled information
+    # like positions and game status
+    sockfile = connectionSocket.makefile("rwb")
+
+    # Forever, read in sentence
+    while True:
+
+        # read bytes from socket
+        line = sockfile.readline()
+        if not line:
+            break
+        
+        letter = line.decode('utf-8').strip().lower()
+        
+        # validate letter
+        if len(letter) != 1 or not letter.isalpha():
+            payload = {
+                "result": "Invalid",
+                "positions": [],
+                "guessesUsed": numGuesses,
+                "gameOver": False,
+                "win": False,
+                "message": "Please guess a single letter (a-z)."
+            }
+            sockfile.write((json.dumps(payload) + "\n").encode("utf-8"))
+            sockfile.flush()
+            continue
+
+        # if the letter is in the word - send the positions so the client can fill it in
+        if letter in word:
+            result = "Correct"
+            positions = positionMap[letter]
+            # add the letter to the set of correctly guessed letters
+            correctLetters.add(letter)
+        elif letter in incorrectLetters:
+            # update the client but don't increment numGuesses
+            result = "Already guessed"
+            positions = []
+        else:
+            result = "Incorrect"
+            positions = []
+            # count the guess if incorrect
+            numGuesses += 1
+            incorrectLetters.add(letter)
+
+        # win condition is met when we can spell the word using the correctly guessed letters
+        win = set(word).issubset(correctLetters)
+        gameOver = win or (numGuesses >= maxGuesses)
+
+        # create the payload with all the information that the client needs
+        payload = {
+            "result": result,
+            "positions": positions,
+            "guessesUsed": numGuesses,
+            "gameOver": gameOver,
+            "win": win,
+            "word": word
+        }
+
+        sockfile.write((json.dumps(payload) + "\n").encode("utf-8"))
+        sockfile.flush()
+        
+        if gameOver:
+            break
+    try:
+        sockfile.close()
+    except:
+        pass
+    connectionSocket.close()
+    print("Client disconnected")

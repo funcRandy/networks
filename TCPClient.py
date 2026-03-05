@@ -28,6 +28,9 @@ clientSocket = socket(AF_INET, SOCK_STREAM)
 # Connect to server using hostname/IP and port
 clientSocket.connect((serverName, serverPort))
 
+# newline-delimited
+sockfile = clientSocket.makefile("rwb")
+
 print("Welcome to HANGMAN!")
 
 wordLength = 8
@@ -41,30 +44,48 @@ while True:
         print("Please enter a single letter (a-z).")
         continue
 
-    clientSocket.send(letter.encode("utf-8"))
+    # Send guess + newline so the server can readline()
+    sockfile.write((letter + "\n").encode("utf-8"))
+    sockfile.flush()
+    
+    # Receive JSON message 
+    line = sockfile.readline()
+    if not line:
+        print("Server disconnected.")
+        break
+    
+    msg = json.loads(line.decode("utf-8"))
 
-    # 1) Correct/Incorrect
-    serverAnswer = clientSocket.recv(1024).decode("utf-8")
-    print(f"From Server: {serverAnswer}")
-
-    # 2) Positions JSON list like: [0,4,6]
-    positionBytes = clientSocket.recv(1024)
-    try:
-        positions = json.loads(positionBytes.decode("utf-8"))
-    except json.JSONDecodeError:
-        print("From Server: (bad JSON positions)", positionBytes)
+    # if result returns invalid, print the associated message
+    if msg.get("result") == "Invalid":
+        print("From Server:", msg.get("message"))
         continue
 
-    # Update board if correct
-    if serverAnswer.strip().lower() == "correct":
+    # get the game information from the server
+    result = msg["result"]
+    positions = msg["positions"]
+    guessesUsed = msg["guessesUsed"]
+    gameOver = msg["gameOver"]
+    win = msg["win"]
+    word = msg["word"]
+
+    # print the result and guess count
+    print(f"From Server: {result}")
+    print(f"Incorrect guesses: {guessesUsed} / 7")
+
+    # fill in the blanks with correct letters
+    if result.lower() == "correct":
         for index in positions:
             if 0 <= index < wordLength:
                 wordLines[index] = letter
 
-    # Win condition
-    if "_" not in wordLines:
-        print(" ".join(wordLines))
+    # win condition from server
+    if win:
+        print("\n" + " ".join(wordLines))
         print("You won!")
         break
 
-clientSocket.close()
+    if gameOver:
+        print("\nGame over — out of guesses.")
+        print("The word was:", word)
+        break
