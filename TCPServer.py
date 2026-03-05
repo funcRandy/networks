@@ -8,9 +8,20 @@ Modified by Dale R. Thompson
 '''
 
 import sys
+import json
 
 # Import socket library
 from socket import *
+
+def letterPositions(word):
+    positions = {}
+
+    for i, letter in enumerate(word):
+        if letter not in positions:
+            positions[letter] = []
+        positions[letter].append(i)
+
+    return positions
 
 # Set port number by converting argument string to integer
 # If no arguments set a default port number
@@ -37,24 +48,33 @@ serverSocket.listen(1)
 
 print("The server is ready to receive")
 
+# Wait for connection and create a new socket
+# It blocks here waiting for connection
+connectionSocket, addr = serverSocket.accept()
+
+word = 'arkansas'
+
 # Forever, read in sentence, convert to uppercase, and send
-while 1:
-    # Wait for connection and create a new socket
-    # It blocks here waiting for connection
-    connectionSocket, addr = serverSocket.accept()
+while True:
 
     # Read bytes from socket
-    sentence = connectionSocket.recv(1024)
+    letter = connectionSocket.recv(1024)
+    
+    if not letter:
+        break
+    
+    letterString = letter.decode('utf-8')
+    
+    if letterString in word:
+        reply = 'Correct'
+        correctPositions = letterPositions(word)[letterString]
+    else:
+        reply = 'Incorrect'
+        correctPositions = []
   
-    # Convert sentence to uppercase
-    # Note you can often send strings directly and it will work but
-    # you should be aware that it does not always act correct.
-    sentenceString = sentence.decode('utf-8')
-    capitalizedSentence = sentenceString.upper()
-    capitalizedSentenceBytes = capitalizedSentence.encode('utf-8')
-  
+    replyBytes = reply.encode('utf-8')
     # Send it into established connection
-    connectionSocket.send(capitalizedSentenceBytes)
-  
-    # Close connection to client but do not close welcome socket
-    connectionSocket.close()
+    connectionSocket.send(replyBytes)
+    
+    correctPositionsBytes = json.dumps(correctPositions).encode('utf-8')
+    connectionSocket.send(correctPositionsBytes)

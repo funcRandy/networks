@@ -6,6 +6,7 @@ Modified by Dale R. Thompson
 '''
 
 import sys
+import json
 
 # Import socket library
 from socket import *
@@ -27,16 +28,43 @@ clientSocket = socket(AF_INET, SOCK_STREAM)
 # Connect to server using hostname/IP and port
 clientSocket.connect((serverName, serverPort))
 
-# Get sentence from user
-sentence = input('Input lowercase sentence: ')
+print("Welcome to HANGMAN!")
 
-# Send it into socket to server
-sentenceBytes = sentence.encode('utf-8')
-clientSocket.send(sentenceBytes)
+wordLength = 8
+wordLines = ["_"] * wordLength
 
-# Receive response from server via socket
-modifiedSentence = clientSocket.recv(1024)
+while True:
+    print(" ".join(wordLines))
+    letter = input("Please enter a letter: ").strip().lower()
 
-print('From Server: {0}'.format(modifiedSentence.decode('utf-8')))
+    if len(letter) != 1 or not letter.isalpha():
+        print("Please enter a single letter (a-z).")
+        continue
+
+    clientSocket.send(letter.encode("utf-8"))
+
+    # 1) Correct/Incorrect
+    serverAnswer = clientSocket.recv(1024).decode("utf-8")
+    print(f"From Server: {serverAnswer}")
+
+    # 2) Positions JSON list like: [0,4,6]
+    positionBytes = clientSocket.recv(1024)
+    try:
+        positions = json.loads(positionBytes.decode("utf-8"))
+    except json.JSONDecodeError:
+        print("From Server: (bad JSON positions)", positionBytes)
+        continue
+
+    # Update board if correct
+    if serverAnswer.strip().lower() == "correct":
+        for index in positions:
+            if 0 <= index < wordLength:
+                wordLines[index] = letter
+
+    # Win condition
+    if "_" not in wordLines:
+        print(" ".join(wordLines))
+        print("You won!")
+        break
 
 clientSocket.close()
