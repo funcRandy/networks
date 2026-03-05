@@ -1,3 +1,6 @@
+# Randall Wade
+# Workday ID: 100005676
+
 ''' TCPClient.py
 usage: python TCPClient.py HOSTNAMEorIP PORT
 Reads text from user, sends to server, and prints answer
